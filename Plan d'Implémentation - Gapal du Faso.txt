@@ -1,0 +1,195 @@
+Plan d'Implémentation - Gapal du Faso
+Système de Gestion Digitalisé des Produits Laitiers
+Résumé du Projet
+Gapal du Faso - Application de gestion pour un vendeur de produits laitiers à Koudougou, Burkina Faso. Le système remplace les méthodes manuelles (papier, WhatsApp) par une solution digitale complète.
+Stack Technique
+Backend: Python/Django + Django REST Framework + Django Channels (WebSockets)
+Base de données: PostgreSQL
+Frontend Web: Next.js 14 + Tailwind CSS + TanStack Query
+Mobile: Flutter (Dart) avec Provider, Sqflite (offline), Speech-to-text
+Déploiement: Docker (on-premise)
+Structure du Projet
+
+/home/lynx/Documents/TANGA/Gapal/
+├── backend/                    # Django API
+│   ├── config/                 # Settings Django
+│   ├── apps/
+│   │   ├── users/              # Authentification & rôles
+│   │   ├── products/           # Produits & catégories
+│   │   ├── orders/             # Commandes
+│   │   ├── stock/              # Mouvements de stock
+│   │   ├── notifications/      # Notifications temps réel
+│   │   └── audit/              # Logs d'audit
+│   └── utils/
+├── web/                        # Next.js Dashboard
+│   └── src/
+│       ├── app/                # Pages (App Router)
+│       ├── components/         # Composants React
+│       ├── hooks/              # Hooks personnalisés
+│       ├── lib/                # API client, WebSocket
+│       └── types/              # Types TypeScript
+├── mobile/                     # Flutter App Vendeurs
+│   └── lib/
+│       ├── models/
+│       ├── providers/
+│       ├── services/
+│       ├── screens/
+│       └── widgets/
+├── docker-compose.yml
+└── README.md
+Entités Principales
+1. Users (Utilisateurs)
+id, username, email, password_hash
+role: vendeur | gestionnaire_commandes | gestionnaire_stocks | admin
+phone, is_active, created_at
+2. Products (Produits)
+id, name, unit_price, stock_quantity
+category_id, expiration_date, unit, barcode
+min_stock_level (seuil alerte)
+3. Orders (Commandes)
+id, order_number, local_id (UUID pour sync offline)
+client_name, client_phone
+delivery_address, delivery_date
+delivery_status: nouvelle | en_preparation | en_cours | livree | annulee
+payment_status: non_payee | payee
+priority: basse | moyenne | haute
+total_price, notes, created_by
+4. OrderItems (Lignes de commande)
+order_id, product_id, quantity, unit_price, subtotal
+5. StockMovements (Mouvements stock)
+product_id, movement_type: entree | sortie | ajustement
+quantity, order_id, reason, user_id
+6. Notifications
+type, title, message, recipient_role, user_id, is_read
+Plan d'Implémentation
+Phase 1: Backend - Fondations
+Initialiser projet Django avec structure settings
+Créer modèle User avec rôles et authentification JWT
+Configurer Django REST Framework
+Mettre en place docker-compose (PostgreSQL + Redis)
+Phase 2: Backend - Modules Métier
+Créer modèles Product et Category avec CRUD API
+Créer modèles Order et OrderItem avec API
+Implémenter calcul automatique des totaux
+Créer modèle StockMovement
+Implémenter signal auto-décrémentation stock sur livraison
+Phase 3: Backend - Temps Réel
+Configurer Django Channels avec Redis
+Créer WebSocket consumer pour notifications
+Implémenter alertes stock bas et péremption
+Phase 4: Frontend Web - Authentification
+Initialiser projet Next.js 14 avec Tailwind
+Créer page login et gestion tokens JWT
+Configurer client API avec interceptors
+Phase 5: Frontend Web - Dashboard Commandes
+Créer tableau commandes avec tri/filtres
+Implémenter mise à jour statuts (livraison/paiement)
+Intégrer WebSocket pour updates temps réel
+Créer composant notifications (cloche + badge)
+Phase 6: Frontend Web - Gestion Stocks
+Créer liste produits avec CRUD
+Implémenter formulaires entrée/sortie stock
+Afficher alertes stock bas
+Créer historique mouvements
+Phase 7: Frontend Web - Administration
+Créer gestion utilisateurs (liste, création, édition)
+Implémenter attribution rôles
+Créer vue logs d'audit
+Phase 8: Frontend Web - Rapports
+Implémenter rapport commandes (période, impayés)
+Créer export PDF/CSV
+Phase 9: Mobile - Fondations
+Initialiser projet Flutter avec Provider
+Configurer base SQLite locale
+Créer service API
+Implémenter authentification
+Phase 10: Mobile - Création Commandes Offline
+Créer sélecteur produits (depuis DB locale)
+Implémenter formulaire multi-étapes
+Créer boutons priorité colorés
+Implémenter toggle paiement
+Ajouter saisie vocale pour notes
+Sauvegarder commandes localement
+Phase 11: Mobile - Synchronisation
+Créer service sync avec détection connectivité
+Implémenter sync automatique au retour réseau
+Gérer conflits (last-write-wins)
+Synchroniser catalogue produits
+Phase 12: Finalisation
+Tests unitaires et d'intégration
+Configuration Docker production
+Documentation déploiement
+Endpoints API Principaux
+Authentification
+POST /api/auth/login/ - Connexion (retourne JWT)
+POST /api/auth/refresh/ - Rafraîchir token
+GET /api/auth/me/ - Profil utilisateur
+Utilisateurs (Admin)
+GET/POST /api/users/ - Liste/Création
+GET/PUT/DELETE /api/users/{id}/ - Détail/Modification/Désactivation
+Produits
+GET/POST /api/products/ - Liste/Création
+GET/PUT/DELETE /api/products/{id}/ - Détail/Modification
+GET /api/products/low-stock/ - Produits stock bas
+GET /api/categories/ - Liste catégories
+Commandes
+GET/POST /api/orders/ - Liste/Création
+GET/PUT /api/orders/{id}/ - Détail/Modification
+PATCH /api/orders/{id}/status/ - Mise à jour statut livraison
+PATCH /api/orders/{id}/payment/ - Mise à jour paiement
+POST /api/orders/sync/ - Sync commandes offline (batch)
+Stock
+GET /api/stock/movements/ - Historique mouvements
+POST /api/stock/entry/ - Entrée stock
+POST /api/stock/exit/ - Sortie manuelle
+POST /api/stock/adjustment/ - Ajustement inventaire
+Notifications
+GET /api/notifications/ - Liste notifications
+POST /api/notifications/{id}/read/ - Marquer lue
+Rapports
+GET /api/reports/orders/pdf/ - Rapport PDF
+GET /api/reports/orders/csv/ - Export CSV
+Fonctionnalités Clés
+1. Mode Offline (Mobile)
+Stockage local SQLite des commandes
+UUID local_id pour chaque commande
+Sync automatique au retour réseau
+Résolution conflits: timestamp (last-write-wins)
+2. Auto-décrémentation Stock
+Signal Django sur changement statut → "livrée"
+Transaction atomique pour tous les items
+Création automatique StockMovement
+Alerte si stock passe sous seuil
+3. Notifications Temps Réel
+WebSocket via Django Channels
+Groupes par rôle utilisateur
+Types: nouvelle commande, statut, stock bas, péremption
+4. Contrôle d'Accès (RBAC)
+Rôle	Permissions
+Vendeur	Créer commandes, voir produits
+Gestionnaire Commandes	Modifier commandes, voir rapports
+Gestionnaire Stocks	CRUD produits, mouvements stock
+Admin	Tout + gestion utilisateurs
+Configuration Docker
+
+services:
+  db:        # PostgreSQL 15
+  redis:     # Redis 7 (WebSocket)
+  backend:   # Django + Daphne (ASGI)
+  web:       # Next.js
+  nginx:     # Reverse proxy
+Fichiers Critiques à Créer
+backend/apps/orders/models.py - Modèle Order avec logique statuts
+backend/apps/orders/signals.py - Auto-décrémentation stock
+backend/apps/notifications/consumers.py - WebSocket temps réel
+web/src/components/orders/OrdersTable.tsx - Dashboard principal
+mobile/lib/services/sync_service.dart - Logique sync offline
+mobile/lib/screens/orders/create_order_screen.dart - Formulaire commande
+Prêt pour Implémentation
+Ce plan couvre l'ensemble des fonctionnalités MVP du cahier des charges:
+Gestion complète des commandes avec priorités et paiements
+Gestion des stocks avec alertes automatiques
+Application mobile offline-first pour vendeurs
+Dashboard web temps réel pour gestionnaires
+Administration des utilisateurs et rôles
+Déploiement Docker on-premise

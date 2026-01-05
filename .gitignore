@@ -1,0 +1,80 @@
+# Global
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+env/
+.venv/
+venv/
+venv*/
+pip-wheel-metadata/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Django / Backend
+/backend/db.sqlite3
+/backend/*.log
+/backend/local_settings.py
+/backend/.env
+/backend/.env.*
+/backend/media/
+/backend/staticfiles/
+/backend/static/
+/backend/__pycache__/
+/backend/*.pyc
+
+# Node / Next.js (web)
+/web/node_modules/
+/web/.next/
+/web/out/
+/web/dist/
+/web/build/
+/web/.env.local
+/web/.env.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Lockfiles - keep lockfiles under source control for reproducible builds
+# (do not ignore package-lock.json or yarn.lock by default)
+
+# Docker
+.env
+.env.*
+docker-compose.override.yml
+docker-compose.*.yml
+/*/postgres_data/
+/*/redis_data/
+
+# Flutter / Mobile (if present)
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.metadata
+.flutter-*
+/mobile/build/
+/mobile/.dart_tool/
+
+# Build / Distribution
+dist/
+build/
+tmp/
+
+# IDE / Editor
+*.sublime-workspace
+*.sublime-project
+
+# Logs
+*.log
+logs/
