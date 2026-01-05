@@ -55,11 +55,15 @@ class Order(models.Model):
     )
     client_phone = models.CharField(
         max_length=20,
+        blank=True,
+        default='',
         verbose_name='Téléphone'
     )
 
     # Delivery information
     delivery_address = models.TextField(
+        blank=True,
+        default='',
         verbose_name='Adresse de livraison'
     )
     delivery_date = models.DateField(

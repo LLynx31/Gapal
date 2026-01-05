@@ -44,18 +44,42 @@ class SyncService {
     try {
       final pendingOrders = await _db.getOrders(pendingOnly: true);
 
-      for (var order in pendingOrders) {
-        try {
-          final response = await _api.createOrder(order.toApiJson());
+      if (pendingOrders.isEmpty) {
+        final pending = await _db.getPendingOrdersCount();
+        return SyncResult(synced: 0, failed: 0, pending: pending);
+      }
+
+      // Try batch sync first
+      try {
+        final syncedOrdersData = await _api.syncOrders(pendingOrders);
+
+        // Mark all as synced
+        for (var i = 0; i < pendingOrders.length; i++) {
+          final order = pendingOrders[i];
+          final responseData = syncedOrdersData[i];
           await _db.markOrderSynced(
             order.localId,
-            response['id'],
-            response['order_number'],
+            responseData['id'],
+            responseData['order_number'],
           );
           synced++;
-        } catch (e) {
-          print('Failed to sync order ${order.localId}: $e');
-          failed++;
+        }
+      } catch (e) {
+        print('Batch sync failed, trying individual sync: $e');
+        // Fallback to individual sync
+        for (var order in pendingOrders) {
+          try {
+            final response = await _api.createOrder(order.toApiJson());
+            await _db.markOrderSynced(
+              order.localId,
+              response['id'],
+              response['order_number'],
+            );
+            synced++;
+          } catch (e) {
+            print('Failed to sync order ${order.localId}: $e');
+            failed++;
+          }
         }
       }
 

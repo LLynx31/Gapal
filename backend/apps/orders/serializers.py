@@ -112,20 +112,47 @@ class OrderListSerializer(serializers.ModelSerializer):
 class OrderCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating orders (from mobile app)."""
     items = OrderItemCreateSerializer(many=True, write_only=True)
-    local_id = serializers.UUIDField(required=False)
+    local_id = serializers.CharField(required=False, allow_null=True, allow_blank=True)
 
     class Meta:
         model = Order
         fields = [
-            'local_id', 'client_name', 'client_phone',
+            'id', 'order_number', 'local_id', 'client_name', 'client_phone',
             'delivery_address', 'delivery_date',
             'priority', 'payment_status', 'notes', 'items'
         ]
+        read_only_fields = ['id', 'order_number']
+
+    def validate_local_id(self, value):
+        """Validate local_id and convert to UUID string if needed."""
+        import uuid
+
+        if not value:
+            # Generate new UUID if not provided or empty
+            return str(uuid.uuid4())
+
+        # Try to parse as UUID
+        try:
+            # Validate it's a proper UUID format
+            uuid.UUID(value)
+            return value  # Return original string if valid
+        except (ValueError, AttributeError):
+            # If invalid UUID (e.g., timestamp), generate a new one
+            # Log for debugging
+            print(f"Invalid UUID '{value}', generating new one")
+            return str(uuid.uuid4())
 
     def validate_items(self, value):
         if not value:
             raise serializers.ValidationError("La commande doit contenir au moins un produit.")
         return value
+
+    def to_representation(self, instance):
+        """Convert UUID back to string in response."""
+        representation = super().to_representation(instance)
+        if 'local_id' in representation and representation['local_id']:
+            representation['local_id'] = str(representation['local_id'])
+        return representation
 
     @transaction.atomic
     def create(self, validated_data):
