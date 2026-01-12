@@ -324,7 +324,7 @@ export default function ProductsPage() {
 
 function ProductModal({
   product,
-  categories,
+  categories: initialCategories,
   onClose,
 }: {
   product: Product | null;
@@ -333,6 +333,7 @@ function ProductModal({
 }) {
   const queryClient = useQueryClient();
   const toast = useToast();
+  const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [formData, setFormData] = useState({
     name: product?.name || '',
     description: product?.description || '',
@@ -346,6 +347,32 @@ function ProductModal({
     is_active: product?.is_active ?? true,
   });
   const [error, setError] = useState('');
+  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+
+  // Fonction pour créer une nouvelle catégorie
+  const handleCreateCategory = async () => {
+    if (!newCategoryName.trim()) {
+      toast.error('Erreur', 'Le nom de la catégorie est requis');
+      return;
+    }
+
+    setIsCreatingCategory(true);
+    try {
+      const newCategory = await api.createCategory({ name: newCategoryName.trim() });
+      setCategories([...categories, newCategory]);
+      setFormData({ ...formData, category: newCategory.id.toString() });
+      setNewCategoryName('');
+      setShowNewCategoryInput(false);
+      queryClient.invalidateQueries({ queryKey: ['categories'] });
+      toast.success('Catégorie créée', `La catégorie "${newCategory.name}" a été créée`);
+    } catch (err: any) {
+      toast.error('Erreur', err.message || 'Erreur lors de la création de la catégorie');
+    } finally {
+      setIsCreatingCategory(false);
+    }
+  };
 
   const createMutation = useMutation({
     mutationFn: (data: Partial<Product>) => api.createProduct(data),
@@ -459,18 +486,64 @@ function ProductModal({
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Catégorie
                 </label>
-                <select
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  <option value="">Sans catégorie</option>
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id.toString()}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
+                {showNewCategoryInput ? (
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      placeholder="Nom de la nouvelle catégorie"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      autoFocus
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCreateCategory}
+                        disabled={isCreatingCategory || !newCategoryName.trim()}
+                        className="flex-1 px-3 py-1.5 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isCreatingCategory ? 'Création...' : 'Créer'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowNewCategoryInput(false);
+                          setNewCategoryName('');
+                        }}
+                        className="px-3 py-1.5 bg-gray-500 text-white text-sm rounded-md hover:bg-gray-600"
+                      >
+                        Annuler
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <select
+                      value={formData.category}
+                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      aria-label="Catégorie du produit"
+                    >
+                      <option value="">Sans catégorie</option>
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.id.toString()}>
+                          {cat.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowNewCategoryInput(true)}
+                      className="px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 border border-gray-300"
+                      title="Créer une nouvelle catégorie"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div>
