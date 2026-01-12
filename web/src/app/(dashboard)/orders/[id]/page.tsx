@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { useToast } from '@/components/ui/Toast';
 import Link from 'next/link';
 import { useAuthStore, canManageOrders } from '@/lib/auth';
 import type { Order } from '@/types';
@@ -36,6 +37,7 @@ export default function OrderDetailPage() {
   const params = useParams();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const toast = useToast();
   const { user } = useAuthStore();
   const canEdit = canManageOrders(user);
   const orderId = Number(params.id);
@@ -48,9 +50,19 @@ export default function OrderDetailPage() {
 
   const statusMutation = useMutation({
     mutationFn: (status: string) => api.updateOrderStatus(orderId, status),
-    onSuccess: () => {
+    onSuccess: (_, status) => {
       queryClient.invalidateQueries({ queryKey: ['order', orderId] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      const messages: Record<string, string> = {
+        en_preparation: 'Commande en préparation',
+        en_cours: 'Livraison lancée',
+        livree: 'Commande livrée',
+        annulee: 'Commande annulée',
+      };
+      toast.success('Statut mis à jour', messages[status] || 'Statut modifié');
+    },
+    onError: (err: Error) => {
+      toast.error('Erreur', err.message || 'Erreur lors de la mise à jour du statut');
     },
   });
 
@@ -59,6 +71,10 @@ export default function OrderDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['order', orderId] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      toast.success('Paiement enregistré', 'La commande a été marquée comme payée');
+    },
+    onError: (err: Error) => {
+      toast.error('Erreur', err.message || 'Erreur lors de la mise à jour du paiement');
     },
   });
 
@@ -229,7 +245,7 @@ export default function OrderDetailPage() {
                 {order.delivery_status_display}
               </Badge>
 
-              {canEdit && nextStatuses.length > 0 && (
+              {nextStatuses.length > 0 && (
                 <div className="mt-3 space-y-2">
                   {nextStatuses.map((status) => (
                     <Button
@@ -237,7 +253,8 @@ export default function OrderDetailPage() {
                       variant={status === 'annulee' ? 'danger' : 'primary'}
                       size="sm"
                       onClick={() => statusMutation.mutate(status)}
-                      disabled={statusMutation.isPending}
+                      disabled={!canEdit || statusMutation.isPending}
+                      title={!canEdit ? "Seul le gestionnaire de commandes peut modifier le statut" : ""}
                       className="w-full"
                     >
                       {status === 'en_preparation' && 'Passer en préparation'}
@@ -257,13 +274,14 @@ export default function OrderDetailPage() {
                 {order.payment_status_display}
               </Badge>
 
-              {canEdit && order.payment_status === 'non_payee' && (
+              {order.payment_status === 'non_payee' && (
                 <div className="mt-3">
                   <Button
                     variant="success"
                     size="sm"
                     onClick={() => paymentMutation.mutate('payee')}
-                    disabled={paymentMutation.isPending}
+                    disabled={!canEdit || paymentMutation.isPending}
+                    title={!canEdit ? "Seul le gestionnaire de commandes peut modifier le paiement" : ""}
                     className="w-full"
                   >
                     Marquer comme payée

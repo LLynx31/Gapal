@@ -1,26 +1,36 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Pagination } from '@/components/ui/Pagination';
+import { useToast } from '@/components/ui/Toast';
+import { useAuthStore, canManageStock } from '@/lib/auth';
 import Link from 'next/link';
 import type { Product, Category, ProductUnit } from '@/types';
 
 export default function ProductsPage() {
+  const { user } = useAuthStore();
+  const canEdit = canManageStock(user);
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const { data: products, isLoading } = useQuery({
-    queryKey: ['products', searchTerm, categoryFilter],
+    queryKey: ['products', searchTerm, categoryFilter, currentPage, pageSize],
     queryFn: () => api.getProducts({
       ...(searchTerm && { search: searchTerm }),
       ...(categoryFilter && { category: categoryFilter }),
+      page: currentPage.toString(),
+      page_size: pageSize.toString(),
     }),
   });
 
@@ -38,6 +48,10 @@ export default function ProductsPage() {
     mutationFn: (id: number) => api.deleteProduct(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
+      toast.success('Produit supprimé', 'Le produit a été retiré du catalogue');
+    },
+    onError: (err: Error) => {
+      toast.error('Erreur', err.message || 'Erreur lors de la suppression');
     },
   });
 
@@ -57,6 +71,15 @@ export default function ProductsPage() {
     setEditingProduct(null);
   };
 
+  // Get products directly from API response (already paginated by backend)
+  const productsList = products?.results || [];
+  const totalPages = products?.count ? Math.ceil(products.count / pageSize) : 0;
+
+  // Reset to page 1 when filters or page size change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, categoryFilter, pageSize]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -69,7 +92,12 @@ export default function ProductsPage() {
           <Link href="/stock">
             <Button variant="secondary">Retour aux stocks</Button>
           </Link>
-          <Button onClick={() => setShowModal(true)}>
+          <Button
+            onClick={() => setShowModal(true)}
+            disabled={!canEdit}
+            title={!canEdit ? "Seul le gestionnaire de stocks peut créer des produits" : ""}
+            className={!canEdit ? "opacity-50 cursor-not-allowed" : ""}
+          >
             + Nouveau produit
           </Button>
         </div>
@@ -156,8 +184,8 @@ export default function ProductsPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {products.results.map((product) => (
-                  <tr key={product.id} className={!product.is_active ? 'bg-gray-50' : ''}>
+                {productsList.map((product) => (
+                  <tr key={product.id} className={`hover:bg-gray-700/50 ${!product.is_active ? 'bg-gray-800/50' : ''}`}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
                         <div className="text-sm font-medium text-gray-900">
@@ -240,6 +268,9 @@ export default function ProductsPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleEdit(product)}
+                          disabled={!canEdit}
+                          title={!canEdit ? "Seul le gestionnaire de stocks peut modifier les produits" : ""}
+                          className={!canEdit ? "opacity-50 cursor-not-allowed" : ""}
                         >
                           Modifier
                         </Button>
@@ -247,7 +278,9 @@ export default function ProductsPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleDelete(product.id)}
-                          className="text-red-600 hover:text-red-800"
+                          disabled={!canEdit}
+                          title={!canEdit ? "Seul le gestionnaire de stocks peut supprimer les produits" : ""}
+                          className={`text-red-600 hover:text-red-800 ${!canEdit ? "opacity-50 cursor-not-allowed" : ""}`}
                         >
                           Supprimer
                         </Button>
@@ -257,6 +290,18 @@ export default function ProductsPage() {
                 ))}
               </tbody>
             </table>
+
+            {/* Pagination */}
+            {products?.count && products.count > 0 && (
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={products.count}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={setPageSize}
+              />
+            )}
           </div>
         ) : (
           <div className="p-8 text-center text-gray-500">
@@ -287,6 +332,7 @@ function ProductModal({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [formData, setFormData] = useState({
     name: product?.name || '',
     description: product?.description || '',
@@ -305,10 +351,12 @@ function ProductModal({
     mutationFn: (data: Partial<Product>) => api.createProduct(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
+      toast.success('Produit créé', 'Le produit a été ajouté au catalogue');
       onClose();
     },
     onError: (err: Error) => {
       setError(err.message || 'Erreur lors de la création');
+      toast.error('Erreur', err.message || 'Erreur lors de la création du produit');
     },
   });
 
@@ -316,10 +364,12 @@ function ProductModal({
     mutationFn: (data: Partial<Product>) => api.updateProduct(product!.id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
+      toast.success('Produit mis à jour', 'Les modifications ont été enregistrées');
       onClose();
     },
     onError: (err: Error) => {
       setError(err.message || 'Erreur lors de la mise à jour');
+      toast.error('Erreur', err.message || 'Erreur lors de la mise à jour');
     },
   });
 
@@ -327,11 +377,11 @@ function ProductModal({
     e.preventDefault();
     setError('');
 
-    const data = {
+    // Base data for both create and update
+    const baseData = {
       name: formData.name,
       description: formData.description,
       unit_price: parseInt(formData.unit_price),
-      stock_quantity: parseInt(formData.stock_quantity),
       category: formData.category ? parseInt(formData.category) : null,
       unit: formData.unit,
       barcode: formData.barcode || null,
@@ -341,9 +391,14 @@ function ProductModal({
     };
 
     if (product) {
-      updateMutation.mutate(data);
+      // Update: don't send stock_quantity (managed via stock movements)
+      updateMutation.mutate(baseData);
     } else {
-      createMutation.mutate(data);
+      // Create: include initial stock_quantity
+      createMutation.mutate({
+        ...baseData,
+        stock_quantity: parseInt(formData.stock_quantity),
+      });
     }
   };
 
@@ -452,16 +507,27 @@ function ProductModal({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Quantité en stock *
+                  {product ? 'Stock actuel' : 'Quantite initiale *'}
                 </label>
-                <input
-                  type="number"
-                  value={formData.stock_quantity}
-                  onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
-                  required
-                  min="0"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
+                {product ? (
+                  <div>
+                    <div className="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-700">
+                      {formData.stock_quantity} {formData.unit}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Pour modifier le stock, utilisez le <a href="/stock" className="text-blue-600 hover:underline">reapprovisionnement</a>
+                    </p>
+                  </div>
+                ) : (
+                  <input
+                    type="number"
+                    value={formData.stock_quantity}
+                    onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
+                    required
+                    min="0"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                )}
               </div>
 
               <div>

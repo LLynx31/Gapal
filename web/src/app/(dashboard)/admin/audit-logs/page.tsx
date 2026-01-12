@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { SkeletonTable } from '@/components/ui/Skeleton';
+import { Pagination } from '@/components/ui/Pagination';
 
 interface AuditLogFilters {
   start_date?: string;
@@ -17,14 +18,19 @@ export default function AuditLogsPage() {
     end_date: new Date().toISOString().split('T')[0],
   });
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
   const { data: logs, isLoading } = useQuery({
-    queryKey: ['audit-logs', filters],
+    queryKey: ['audit-logs', filters, currentPage, pageSize],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.start_date) params.append('start_date', filters.start_date);
       if (filters.end_date) params.append('end_date', filters.end_date);
       if (filters.user_id) params.append('user_id', filters.user_id.toString());
       if (filters.action_type) params.append('action_type', filters.action_type);
+      params.append('page', currentPage.toString());
+      params.append('page_size', pageSize.toString());
 
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/audit/logs/?${params}`, {
         headers: {
@@ -35,7 +41,7 @@ export default function AuditLogsPage() {
       if (!response.ok) {
         // If endpoint doesn't exist yet, return mock data
         if (response.status === 404) {
-          return [];
+          return { results: [], count: 0 };
         }
         throw new Error('Failed to fetch audit logs');
       }
@@ -91,6 +97,15 @@ export default function AuditLogsPage() {
     }
     return 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300';
   };
+
+  // Get logs directly from API response (already paginated by backend)
+  const logsList = Array.isArray(logs) ? logs : (logs?.results || []);
+  const totalPages = logs?.count ? Math.ceil(logs.count / pageSize) : 0;
+
+  // Reset to page 1 when filters or page size change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters, pageSize]);
 
   const getActionTypeIcon = (type: string) => {
     if (type.includes('create')) {
@@ -251,8 +266,8 @@ export default function AuditLogsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {logs?.map((log: any) => (
-                  <tr key={log.id} className="table-row-hover">
+                {logsList.map((log: any) => (
+                  <tr key={log.id} className="hover:bg-gray-700/50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
                       {new Date(log.created_at).toLocaleString('fr-FR')}
                     </td>
@@ -310,6 +325,18 @@ export default function AuditLogsPage() {
             </table>
           )}
         </div>
+
+        {/* Pagination */}
+        {!isLoading && logs?.count && logs.count > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={logs.count}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
       </div>
 
       {/* Info Notice */}

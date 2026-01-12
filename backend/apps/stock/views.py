@@ -21,10 +21,14 @@ from apps.users.permissions import IsStockManager
 
 
 class StockMovementViewSet(viewsets.ReadOnlyModelViewSet):
-    """ViewSet for viewing stock movements (read-only)."""
+    """
+    ViewSet for viewing stock movements (read-only).
+
+    - Lecture: Tous les utilisateurs authentifiés
+    """
     queryset = StockMovement.objects.select_related('product', 'user', 'order')
     serializer_class = StockMovementSerializer
-    permission_classes = [IsAuthenticated, IsStockManager]
+    permission_classes = [IsAuthenticated]  # Lecture pour tous les authentifiés
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = ['product', 'movement_type']
     ordering_fields = ['created_at']
@@ -53,6 +57,13 @@ class StockEntryView(APIView):
         serializer.is_valid(raise_exception=True)
 
         product = Product.objects.get(id=serializer.validated_data['product_id'])
+
+        # Update expiration date if provided
+        expiration_date = serializer.validated_data.get('expiration_date')
+        if expiration_date:
+            product.expiration_date = expiration_date
+            product.save(update_fields=['expiration_date'])
+
         movement = create_stock_entry(
             product=product,
             quantity=serializer.validated_data['quantity'],
@@ -111,8 +122,12 @@ class StockAdjustmentView(APIView):
 
 
 class StockAlertsView(APIView):
-    """Get stock alerts (low stock and expiring products)."""
-    permission_classes = [IsAuthenticated, IsStockManager]
+    """
+    Get stock alerts (low stock and expiring products).
+
+    - Lecture: Tous les utilisateurs authentifiés
+    """
+    permission_classes = [IsAuthenticated]  # Lecture pour tous les authentifiés
 
     def get(self, request):
         from django.db.models import F

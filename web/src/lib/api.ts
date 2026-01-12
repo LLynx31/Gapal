@@ -5,7 +5,8 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import type {
   AuthTokens, LoginCredentials, User, Order, Product, Category,
-  StockMovement, Notification, PaginatedResponse, OrderStats, StockAlerts
+  StockMovement, Notification, PaginatedResponse, OrderStats, StockAlerts,
+  Sale, SaleCreateData, SaleStats, ReceiptData
 } from '@/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
@@ -215,12 +216,16 @@ class ApiClient {
     return response.data;
   }
 
-  async createStockEntry(productId: number, quantity: number, reason?: string): Promise<StockMovement> {
-    const response = await this.client.post<StockMovement>('/stock/entry/', {
+  async createStockEntry(productId: number, quantity: number, reason?: string, expirationDate?: string): Promise<StockMovement> {
+    const data: Record<string, any> = {
       product_id: productId,
       quantity,
-      reason,
-    });
+      reason: reason || '',
+    };
+    if (expirationDate) {
+      data.expiration_date = expirationDate;
+    }
+    const response = await this.client.post<StockMovement>('/stock/entry/', data);
     return response.data;
   }
 
@@ -264,6 +269,52 @@ class ApiClient {
 
   async markAllNotificationsRead(): Promise<void> {
     await this.client.post('/notifications/read_all/');
+  }
+
+  // ===== SALES =====
+  async getSales(params?: Record<string, string>): Promise<PaginatedResponse<Sale>> {
+    const response = await this.client.get<PaginatedResponse<Sale>>('/sales/', { params });
+    return response.data;
+  }
+
+  async getSale(id: number): Promise<Sale> {
+    const response = await this.client.get<Sale>(`/sales/${id}/`);
+    return response.data;
+  }
+
+  async createSale(data: SaleCreateData): Promise<Sale> {
+    const response = await this.client.post<Sale>('/sales/', data);
+    return response.data;
+  }
+
+  async getSaleReceipt(id: number): Promise<ReceiptData> {
+    const response = await this.client.get<ReceiptData>(`/sales/${id}/receipt/`);
+    return response.data;
+  }
+
+  async getSaleStats(): Promise<SaleStats> {
+    const response = await this.client.get<SaleStats>('/sales/stats/');
+    return response.data;
+  }
+
+  async getTodaySales(): Promise<Sale[]> {
+    const response = await this.client.get<Sale[]>('/sales/today/');
+    return response.data;
+  }
+
+  async getRecentSales(): Promise<Sale[]> {
+    const response = await this.client.get<Sale[]>('/sales/recent/');
+    return response.data;
+  }
+
+  async markSalePaid(id: number): Promise<Sale> {
+    const response = await this.client.post<Sale>(`/sales/${id}/mark_paid/`);
+    return response.data;
+  }
+
+  async addSalePayment(id: number, amount: number): Promise<Sale> {
+    const response = await this.client.post<Sale>(`/sales/${id}/add_payment/`, { amount });
+    return response.data;
   }
 }
 

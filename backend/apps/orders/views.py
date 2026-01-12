@@ -9,7 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.utils import timezone
-from django.db.models import Count
+from django.db.models import Count, Case, When, IntegerField, Q
 
 from .models import Order, OrderItem
 from .serializers import (
@@ -24,25 +24,44 @@ class OrderViewSet(viewsets.ModelViewSet):
     """
     ViewSet for managing orders.
 
-    - Vendors: Create orders, view their own orders
-    - Order Managers: View all orders, update status
-    - Admins: Full access
+    - Lecture: Tous les utilisateurs authentifiés
+    - Création: Vendeurs + Gestionnaire commandes + Admin
+    - Modification: Gestionnaire commandes + Admin
     """
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['delivery_status', 'payment_status', 'priority']
     search_fields = ['order_number', 'client_name', 'client_phone']
-    ordering_fields = ['priority', 'delivery_date', 'created_at', 'total_price']
-    ordering = ['-priority', '-created_at']
+    ordering_fields = ['priority', 'delivery_date', 'created_at', 'total_price', 'status_order', 'priority_order']
+    ordering = ['status_order', 'priority_order', '-created_at']  # Nouvelles en haut, par priorité, puis récentes en premier
 
     def get_queryset(self):
-        user = self.request.user
+        # Annotation pour le tri intelligent:
+        # 1. Les commandes non traitées (nouvelle, en_preparation, en_cours) en haut
+        # 2. Tri par priorité: haute=1, moyenne=2, basse=3
+        # 3. Les commandes livrées/annulées en bas
         queryset = Order.objects.annotate(
-            items_count=Count('items')
+            items_count=Count('items'),
+            # Status order: commandes actives en haut (valeur basse), terminées en bas (valeur haute)
+            status_order=Case(
+                When(delivery_status='nouvelle', then=1),
+                When(delivery_status='en_preparation', then=2),
+                When(delivery_status='en_cours', then=3),
+                When(delivery_status='livree', then=10),
+                When(delivery_status='annulee', then=11),
+                default=5,
+                output_field=IntegerField(),
+            ),
+            # Priority order: haute=1, moyenne=2, basse=3
+            priority_order=Case(
+                When(priority='haute', then=1),
+                When(priority='moyenne', then=2),
+                When(priority='basse', then=3),
+                default=2,
+                output_field=IntegerField(),
+            )
         ).select_related('created_by')
 
-        # Vendors only see their own orders
-        if user.is_vendor:
-            queryset = queryset.filter(created_by=user)
+        # Tous les utilisateurs authentifiés peuvent voir toutes les commandes
 
         # Filter by date range
         start_date = self.request.query_params.get('start_date')
@@ -75,11 +94,14 @@ class OrderViewSet(viewsets.ModelViewSet):
         return OrderSerializer
 
     def get_permissions(self):
+        # Lecture: tous les utilisateurs authentifiés
+        if self.action in ['list', 'retrieve', 'pending', 'unpaid', 'today', 'stats']:
+            return [IsAuthenticated()]
+        # Création: vendeurs + gestionnaires commandes + admin
         if self.action in ['create', 'sync']:
             return [IsAuthenticated()]
-        if self.action in ['update', 'partial_update', 'update_status', 'update_payment', 'destroy']:
-            return [IsAuthenticated(), IsOrderManager()]
-        return [IsAuthenticated(), IsVendorOrOrderManager()]
+        # Modification: gestionnaires commandes + admin
+        return [IsAuthenticated(), IsOrderManager()]
 
     @action(detail=True, methods=['patch'])
     def update_status(self, request, pk=None):
@@ -192,7 +214,47 @@ class OrderViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def stats(self, request):
         """Get order statistics."""
+        from django.db.models import Sum
+        from datetime import timedelta
+
         queryset = self.get_queryset()
+        today = timezone.now().date()
+
+        # Daily revenue for the last 7 days
+        daily_revenue = []
+        daily_orders = []
+        days_fr = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
+        for i in range(6, -1, -1):  # 6 days ago to today
+            day = today - timedelta(days=i)
+            day_orders = queryset.filter(created_at__date=day)
+            day_revenue = day_orders.filter(
+                payment_status=Order.PaymentStatus.PAYEE
+            ).aggregate(total=Sum('total_price'))['total'] or 0
+            daily_revenue.append({
+                'date': day.strftime('%Y-%m-%d'),
+                'label': days_fr[day.weekday()],  # Lun, Mar, Mer, etc.
+                'value': float(day_revenue)
+            })
+            daily_orders.append({
+                'date': day.strftime('%Y-%m-%d'),
+                'label': days_fr[day.weekday()],
+                'value': day_orders.count()
+            })
+
+        # Today's statistics
+        today_orders = queryset.filter(created_at__date=today)
+        today_revenue = today_orders.filter(
+            payment_status=Order.PaymentStatus.PAYEE
+        ).aggregate(total=Sum('total_price'))['total'] or 0
+
+        # This month's revenue
+        month_orders = queryset.filter(
+            created_at__year=today.year,
+            created_at__month=today.month
+        )
+        month_revenue = month_orders.filter(
+            payment_status=Order.PaymentStatus.PAYEE
+        ).aggregate(total=Sum('total_price'))['total'] or 0
 
         stats = {
             'total': queryset.count(),
@@ -204,6 +266,11 @@ class OrderViewSet(viewsets.ModelViewSet):
             'payee': queryset.filter(payment_status=Order.PaymentStatus.PAYEE).count(),
             'non_payee': queryset.filter(payment_status=Order.PaymentStatus.NON_PAYEE).count(),
             'haute_priorite': queryset.filter(priority=Order.Priority.HAUTE).count(),
+            'today': today_orders.count(),
+            'revenue_today': float(today_revenue),
+            'revenue_month': float(month_revenue),
+            'daily_revenue': daily_revenue,
+            'daily_orders': daily_orders,
         }
 
         return Response(stats)

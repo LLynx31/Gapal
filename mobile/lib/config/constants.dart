@@ -1,7 +1,7 @@
 /// Application constants
 class AppConstants {
   // API
-  static const String apiBaseUrl = 'http://10.0.2.2:8000/api'; // Android emulator
+  static const String apiBaseUrl = 'https://api.gapal.tangagroup.com/api'; // Android emulator
   // static const String apiBaseUrl = 'http://localhost:8000/api'; // iOS simulator
 
   // Storage keys

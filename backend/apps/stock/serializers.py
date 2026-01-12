@@ -33,6 +33,7 @@ class StockEntrySerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
     quantity = serializers.IntegerField(min_value=1)
     reason = serializers.CharField(max_length=255, required=False, default='')
+    expiration_date = serializers.DateField(required=False, allow_null=True)
 
     def validate_product_id(self, value):
         try:

@@ -146,6 +146,14 @@ export interface PaginatedResponse<T> {
   results: T[];
 }
 
+// Trend data point
+export interface TrendDataPoint {
+  date: string;
+  label: string;
+  value: number;
+  count?: number;
+}
+
 // Stats types
 export interface OrderStats {
   total: number;
@@ -160,6 +168,8 @@ export interface OrderStats {
   today: number;
   revenue_today: number;
   revenue_month: number;
+  daily_revenue: TrendDataPoint[];
+  daily_orders: TrendDataPoint[];
 }
 
 export interface StockAlerts {
@@ -172,3 +182,86 @@ export interface StockAlerts {
     out_of_stock: number;
   };
 }
+
+// Sale types
+export interface Sale {
+  id: number;
+  receipt_number: string;
+  local_id: string;
+  client_name: string;
+  client_phone: string;
+  payment_method: SalePaymentMethod;
+  payment_method_display: string;
+  payment_status: SalePaymentStatus;
+  payment_status_display: string;
+  subtotal: number;
+  discount: number;
+  total_amount: number;
+  amount_paid: number;
+  amount_due: number;
+  items: SaleItem[];
+  items_count: number;
+  created_by: number;
+  created_by_name: string;
+  created_at: string;
+}
+
+export interface SaleItem {
+  id: number;
+  product: number;
+  product_name: string;
+  product_unit: string;
+  quantity: number;
+  unit_price: number;
+  subtotal: number;
+}
+
+export interface SaleCreateItem {
+  product_id: number;
+  quantity: number;
+  unit_price: number;
+}
+
+export interface SaleCreateData {
+  client_name?: string;
+  client_phone?: string;
+  payment_method: SalePaymentMethod;
+  payment_status?: SalePaymentStatus;
+  discount?: number;
+  amount_paid?: number;
+  items: SaleCreateItem[];
+}
+
+export interface SaleStats {
+  today: { count: number; total: number };
+  week: { count: number; total: number };
+  month: { count: number; total: number };
+  payment_methods: { payment_method: string; count: number; total: number }[];
+  pending: { count: number; total: number };
+  daily_sales: TrendDataPoint[];
+}
+
+export interface ReceiptData {
+  id: number;
+  receipt_number: string;
+  client_name: string;
+  client_phone: string;
+  payment_method: string;
+  payment_method_display: string;
+  payment_status: string;
+  payment_status_display: string;
+  subtotal: number;
+  discount: number;
+  total_amount: number;
+  amount_paid: number;
+  amount_due: number;
+  items: SaleItem[];
+  created_at: string;
+  created_by_name: string;
+  company_name: string;
+  company_address: string;
+  company_phone: string;
+}
+
+export type SalePaymentMethod = 'especes' | 'mobile_money' | 'carte' | 'credit';
+export type SalePaymentStatus = 'payee' | 'en_attente' | 'partielle';

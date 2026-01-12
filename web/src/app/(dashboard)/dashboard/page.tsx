@@ -1,48 +1,29 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { wsClient } from '@/lib/websocket';
 import { useAuthStore } from '@/lib/auth';
+import { useToast } from '@/components/ui/Toast';
 import { SkeletonStats, SkeletonCard } from '@/components/ui/Skeleton';
-import { DonutChart, BarChart, ChartLegend, ProgressRing } from '@/components/charts/SimpleChart';
+import { DonutChart, BarChart, LineChart, ChartLegend, ProgressRing, Sparkline } from '@/components/charts/SimpleChart';
 import Link from 'next/link';
-
-interface DashboardStats {
-  orders: {
-    total: number;
-    nouvelle: number;
-    en_preparation: number;
-    en_cours: number;
-    livree: number;
-    non_payee: number;
-    haute_priorite: number;
-    today: number;
-    revenue_today: number;
-    revenue_month: number;
-  };
-  stock: {
-    total_products: number;
-    low_stock: number;
-    expiring_soon: number;
-    total_value: number;
-  };
-  recent_orders: Array<{
-    id: number;
-    order_number: string;
-    client_name: string;
-    total_price: number;
-    delivery_status: string;
-    payment_status: string;
-    created_at: string;
-  }>;
-}
+import type { OrderStats, SaleStats } from '@/types';
 
 export default function DashboardPage() {
   const { user } = useAuthStore();
+  const toast = useToast();
+  const queryClient = useQueryClient();
 
-  const { data: orderStats, isLoading: loadingOrders } = useQuery({
+  const { data: orderStats, isLoading: loadingOrders } = useQuery<OrderStats>({
     queryKey: ['orderStats'],
     queryFn: () => api.getOrderStats(),
+  });
+
+  const { data: saleStats, isLoading: loadingSales } = useQuery<SaleStats>({
+    queryKey: ['saleStats'],
+    queryFn: () => api.getSaleStats(),
   });
 
   const { data: stockStats, isLoading: loadingStock } = useQuery({
@@ -78,7 +59,29 @@ export default function DashboardPage() {
     },
   });
 
-  const isLoading = loadingOrders || loadingStock || loadingRecent;
+  // WebSocket for real-time updates
+  useEffect(() => {
+    const unsubscribe = wsClient.on('notification', (data) => {
+      if (data.type === 'new_order') {
+        toast.info(
+          'Nouvelle commande',
+          data.message || `Commande ${data.order_number || ''} reçue`
+        );
+        queryClient.invalidateQueries({ queryKey: ['orderStats'] });
+        queryClient.invalidateQueries({ queryKey: ['recentOrders'] });
+      } else if (data.type === 'low_stock') {
+        toast.warning(
+          'Stock bas',
+          data.message || `${data.product_name} est en stock bas`
+        );
+        queryClient.invalidateQueries({ queryKey: ['stockStats'] });
+      }
+    });
+
+    return () => unsubscribe();
+  }, [toast, queryClient]);
+
+  const isLoading = loadingOrders || loadingStock || loadingRecent || loadingSales;
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('fr-FR', {
@@ -89,7 +92,16 @@ export default function DashboardPage() {
     }).format(amount);
   };
 
-  // DashStack style - Light: fond pastel + texte foncé | Dark: fond saturé + texte blanc
+  // Calcul du CA total (commandes + ventes boutique)
+  const totalRevenueMonth = (orderStats?.revenue_month || 0) + (saleStats?.month?.total || 0);
+  const totalRevenueToday = (orderStats?.revenue_today || 0) + (saleStats?.today?.total || 0);
+
+  // Combiner les données de revenus (commandes + ventes) pour le sparkline
+  const combinedRevenueData = orderStats?.daily_revenue?.map((orderDay, index) => {
+    const saleDay = saleStats?.daily_sales?.[index];
+    return orderDay.value + (saleDay?.value || 0);
+  }) || [];
+
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       nouvelle: 'bg-blue-100 text-blue-700 dark:bg-blue-600 dark:text-white',
@@ -112,18 +124,32 @@ export default function DashboardPage() {
     return labels[status] || status;
   };
 
-  // Prepare chart data - DashStack palette (blue, violet, cyan, green)
+  // Prepare chart data
   const orderStatusChartData = [
-    { label: 'Nouvelles', value: orderStats?.nouvelle || 0, color: '#3b82f6' }, // Blue
-    { label: 'En prép.', value: orderStats?.en_preparation || 0, color: '#8b5cf6' }, // Violet
-    { label: 'En cours', value: orderStats?.en_cours || 0, color: '#06b6d4' }, // Cyan
-    { label: 'Livrées', value: orderStats?.livree || 0, color: '#22c55e' }, // Green
+    { label: 'Nouvelles', value: orderStats?.nouvelle || 0, color: '#3b82f6' },
+    { label: 'En prép.', value: orderStats?.en_preparation || 0, color: '#8b5cf6' },
+    { label: 'En cours', value: orderStats?.en_cours || 0, color: '#06b6d4' },
+    { label: 'Livrées', value: orderStats?.livree || 0, color: '#22c55e' },
   ];
 
   const deliveryRate = orderStats?.total ? Math.round((orderStats.livree / orderStats.total) * 100) : 0;
   const paymentRate = orderStats?.total && orderStats.non_payee !== undefined
     ? Math.round(((orderStats.total - orderStats.non_payee) / orderStats.total) * 100)
     : 0;
+
+  // Calculate trends - utiliser les données combinées pour le CA
+  const ordersSparklineData = orderStats?.daily_orders?.map(d => d.value) || [];
+  const salesSparklineData = saleStats?.daily_sales?.map(d => d.value) || [];
+
+  const calculateTrend = (data: number[]) => {
+    if (data.length < 2) return 0;
+    const lastDay = data[data.length - 1] || 0;
+    const prevDay = data[data.length - 2] || 0;
+    if (prevDay === 0) return lastDay > 0 ? 100 : 0;
+    return Math.round(((lastDay - prevDay) / prevDay) * 100);
+  };
+
+  const revenueTrend = calculateTrend(combinedRevenueData);
 
   if (isLoading) {
     return (
@@ -144,110 +170,183 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Tableau de bord</h1>
-        <p className="text-gray-600 dark:text-gray-400">
-          Vue d'ensemble de votre activité
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Tableau de bord</h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            Vue d'ensemble de votre activité
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+          <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+          Mise à jour en temps réel
+        </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* KPI Cards Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Commandes du jour - DashStack blue */}
-        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-6 card-hover">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Commandes du jour</p>
-              <p className="text-4xl font-bold text-gray-900 dark:text-white mt-2">{orderStats?.today || 0}</p>
-            </div>
-            <div className="w-14 h-14 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
-              <svg className="w-7 h-7 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-            </div>
-          </div>
-          <div className="mt-4 flex items-center text-sm">
-            <span className="text-green-600 dark:text-green-400 font-medium">{orderStats?.nouvelle || 0}</span>
-            <span className="text-gray-500 dark:text-gray-400 ml-1">nouvelles à traiter</span>
-          </div>
-        </div>
-
-        {/* Chiffre d'affaires - Keep Gapal orange for revenue (brand) */}
-        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-6 card-hover">
-          <div className="flex items-center justify-between">
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">CA du mois</p>
-              <p className="text-4xl font-bold text-[#FF9800] dark:text-[#FFB74D] mt-2 truncate">
-                {formatCurrency(orderStats?.revenue_month || 0)}
-              </p>
-            </div>
-            <div className="w-14 h-14 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center shrink-0 ml-2">
-              <svg className="w-7 h-7 text-orange-600 dark:text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        {/* Chiffre d'affaires du mois */}
+        <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg p-6 text-white">
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
+            {combinedRevenueData.length > 1 && (
+              <Sparkline data={combinedRevenueData} width={60} height={30} color="rgba(255,255,255,0.8)" />
+            )}
           </div>
-          <div className="mt-4 flex items-center text-sm">
-            <span className="text-gray-500 dark:text-gray-400">Aujourd'hui:</span>
-            <span className="text-green-600 dark:text-green-400 font-medium ml-1">{formatCurrency(orderStats?.revenue_today || 0)}</span>
+          <p className="text-white/80 text-sm font-medium">CA du mois</p>
+          <p className="text-3xl font-bold mt-1">{formatCurrency(totalRevenueMonth)}</p>
+          <div className="mt-3 flex items-center text-sm">
+            <span className={`flex items-center ${revenueTrend >= 0 ? 'text-green-200' : 'text-red-200'}`}>
+              {revenueTrend >= 0 ? (
+                <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                </svg>
+              )}
+              {Math.abs(revenueTrend)}%
+            </span>
+            <span className="text-white/60 ml-2">vs hier</span>
           </div>
         </div>
 
-        {/* Produits - DashStack purple */}
-        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-6 card-hover">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Produits en stock</p>
-              <p className="text-4xl font-bold text-gray-900 dark:text-white mt-2">{stockStats?.total_products || 0}</p>
-            </div>
-            <div className="w-14 h-14 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
-              <svg className="w-7 h-7 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+        {/* Commandes du jour */}
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
               </svg>
             </div>
+            {ordersSparklineData.length > 1 && (
+              <Sparkline data={ordersSparklineData} width={60} height={30} color="#3b82f6" />
+            )}
           </div>
-          <div className="mt-4 flex items-center text-sm">
-            <span className="text-gray-500 dark:text-gray-400">Valeur totale:</span>
-            <span className="text-purple-600 dark:text-purple-400 font-medium ml-1">{formatCurrency(stockStats?.total_value || 0)}</span>
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Commandes du jour</p>
+          <p className="text-3xl font-bold text-gray-900 dark:text-white mt-1">{orderStats?.today || 0}</p>
+          <div className="mt-3 flex items-center text-sm">
+            <span className="text-blue-600 dark:text-blue-400 font-medium">{orderStats?.nouvelle || 0} nouvelles</span>
+            <span className="text-gray-400 mx-2">•</span>
+            <span className="text-yellow-600 dark:text-yellow-400">{orderStats?.en_preparation || 0} en prép.</span>
           </div>
         </div>
 
-        {/* Alertes - Keep red */}
-        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-6 card-hover">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Alertes</p>
-              <p className="text-4xl font-bold text-gray-900 dark:text-white mt-2">
-                {(stockStats?.low_stock || 0) + (stockStats?.expiring_soon || 0) + (orderStats?.non_payee || 0)}
-              </p>
+        {/* Ventes du jour */}
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
             </div>
-            <div className="w-14 h-14 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
-              <svg className="w-7 h-7 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            {salesSparklineData.length > 1 && (
+              <Sparkline data={salesSparklineData} width={60} height={30} color="#22c55e" />
+            )}
+          </div>
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Ventes du jour</p>
+          <p className="text-3xl font-bold text-gray-900 dark:text-white mt-1">{formatCurrency(saleStats?.today?.total || 0)}</p>
+          <div className="mt-3 flex items-center text-sm">
+            <span className="text-green-600 dark:text-green-400 font-medium">{saleStats?.today?.count || 0} ventes</span>
+            <span className="text-gray-400 mx-2">•</span>
+            <span className="text-purple-600 dark:text-purple-400">Semaine: {formatCurrency(saleStats?.week?.total || 0)}</span>
+          </div>
+        </div>
+
+        {/* Alertes */}
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="w-12 h-12 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center">
+              <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
             </div>
+            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+              (stockStats?.low_stock || 0) + (stockStats?.expiring_soon || 0) + (orderStats?.non_payee || 0) > 0
+                ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+            }`}>
+              {(stockStats?.low_stock || 0) + (stockStats?.expiring_soon || 0) + (orderStats?.non_payee || 0) > 0 ? 'Attention' : 'OK'}
+            </span>
           </div>
-          <div className="mt-4 space-y-1">
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Alertes</p>
+          <p className="text-3xl font-bold text-gray-900 dark:text-white mt-1">
+            {(stockStats?.low_stock || 0) + (stockStats?.expiring_soon || 0) + (orderStats?.non_payee || 0)}
+          </p>
+          <div className="mt-3 space-y-1 text-xs">
             {(stockStats?.low_stock || 0) > 0 && (
-              <p className="text-sm text-red-600 dark:text-red-400">{stockStats?.low_stock} produit(s) en stock bas</p>
-            )}
-            {(stockStats?.expiring_soon || 0) > 0 && (
-              <p className="text-sm text-orange-600 dark:text-orange-400">{stockStats?.expiring_soon} produit(s) expirant bientôt</p>
+              <p className="text-red-600 dark:text-red-400">{stockStats?.low_stock} stock bas</p>
             )}
             {(orderStats?.non_payee || 0) > 0 && (
-              <p className="text-sm text-yellow-600 dark:text-yellow-400">{orderStats?.non_payee} commande(s) non payée(s)</p>
+              <p className="text-yellow-600 dark:text-yellow-400">{orderStats?.non_payee} impayée(s)</p>
+            )}
+            {(stockStats?.expiring_soon || 0) > 0 && (
+              <p className="text-orange-600 dark:text-orange-400">{stockStats?.expiring_soon} expire bientôt</p>
             )}
           </div>
         </div>
       </div>
 
       {/* Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Revenue Trend Chart */}
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Évolution du CA</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">7 derniers jours (Commandes + Ventes)</p>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(totalRevenueToday)}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Aujourd'hui</p>
+            </div>
+          </div>
+          <LineChart
+            data={(orderStats?.daily_revenue || []).map((day, index) => ({
+              ...day,
+              value: day.value + (saleStats?.daily_sales?.[index]?.value || 0)
+            }))}
+            height={200}
+            color="#f97316"
+            showDots={true}
+            showArea={true}
+          />
+        </div>
+
+        {/* Orders Trend Chart */}
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Commandes reçues</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">7 derniers jours</p>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{orderStats?.today || 0}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Aujourd'hui</p>
+            </div>
+          </div>
+          <LineChart
+            data={orderStats?.daily_orders || []}
+            height={200}
+            color="#3b82f6"
+            showDots={true}
+            showArea={true}
+          />
+        </div>
+      </div>
+
+      {/* Second Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Orders Distribution Chart */}
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Répartition des commandes</h2>
           <div className="flex flex-col items-center">
-            <DonutChart data={orderStatusChartData} size={180} strokeWidth={25} />
+            <DonutChart data={orderStatusChartData} size={160} strokeWidth={25} />
             <ChartLegend
               className="mt-4"
               items={orderStatusChartData.map((d) => ({
@@ -268,26 +367,36 @@ export default function DashboardPage() {
         {/* Performance Rings */}
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Performance</h2>
-          <div className="flex justify-around items-center h-[180px]">
+          <div className="flex justify-around items-center h-[160px]">
             <ProgressRing
               value={deliveryRate}
-              size={100}
+              size={90}
               strokeWidth={10}
               color="#22c55e"
               label="Livraison"
             />
             <ProgressRing
               value={paymentRate}
-              size={100}
+              size={90}
               strokeWidth={10}
               color="#3b82f6"
               label="Paiement"
             />
           </div>
+          <div className="mt-4 grid grid-cols-2 gap-4">
+            <div className="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+              <p className="text-2xl font-bold text-green-600 dark:text-green-400">{orderStats?.livree || 0}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Livrées</p>
+            </div>
+            <div className="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{orderStats?.payee || 0}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Payées</p>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Second Row */}
+      {/* Status Overview and Quick Actions Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Order Status Overview */}
         <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-6">
@@ -297,10 +406,10 @@ export default function DashboardPage() {
               href="/orders"
               className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
             >
-              Voir tout
+              Voir tout →
             </Link>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <StatusCard
               label="Nouvelles"
               count={orderStats?.nouvelle || 0}
@@ -308,7 +417,7 @@ export default function DashboardPage() {
               href="/orders?delivery_status=nouvelle"
             />
             <StatusCard
-              label="En préparation"
+              label="En prép."
               count={orderStats?.en_preparation || 0}
               color="yellow"
               href="/orders?delivery_status=en_preparation"
@@ -326,7 +435,7 @@ export default function DashboardPage() {
               href="/orders?delivery_status=livree"
             />
             <StatusCard
-              label="Haute priorité"
+              label="Priorité haute"
               count={orderStats?.haute_priorite || 0}
               color="red"
               href="/orders?priority=haute"
@@ -338,13 +447,11 @@ export default function DashboardPage() {
             <div>
               <div className="flex justify-between text-sm mb-1">
                 <span className="text-gray-600 dark:text-gray-400">Taux de livraison</span>
-                <span className="font-medium text-gray-900 dark:text-white">
-                  {deliveryRate}%
-                </span>
+                <span className="font-medium text-gray-900 dark:text-white">{deliveryRate}%</span>
               </div>
-              <div className="progress-bar dark:bg-gray-700">
+              <div className="h-2 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
                 <div
-                  className="progress-bar-fill bg-green-500"
+                  className="h-full bg-gradient-to-r from-green-400 to-green-500 rounded-full transition-all duration-500"
                   style={{ width: `${deliveryRate}%` }}
                 />
               </div>
@@ -352,13 +459,11 @@ export default function DashboardPage() {
             <div>
               <div className="flex justify-between text-sm mb-1">
                 <span className="text-gray-600 dark:text-gray-400">Taux de paiement</span>
-                <span className="font-medium text-gray-900 dark:text-white">
-                  {paymentRate}%
-                </span>
+                <span className="font-medium text-gray-900 dark:text-white">{paymentRate}%</span>
               </div>
-              <div className="progress-bar dark:bg-slate-700">
+              <div className="h-2 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
                 <div
-                  className="progress-bar-fill bg-blue-500"
+                  className="h-full bg-gradient-to-r from-blue-400 to-blue-500 rounded-full transition-all duration-500"
                   style={{ width: `${paymentRate}%` }}
                 />
               </div>
@@ -382,6 +487,17 @@ export default function DashboardPage() {
               <span className="ml-3 font-medium text-gray-900 dark:text-white">Gérer les commandes</span>
             </Link>
             <Link
+              href="/sales"
+              className="flex items-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors group"
+            >
+              <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
+              <span className="ml-3 font-medium text-gray-900 dark:text-white">Nouvelle vente</span>
+            </Link>
+            <Link
               href="/stock"
               className="flex items-center p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-colors group"
             >
@@ -394,9 +510,9 @@ export default function DashboardPage() {
             </Link>
             <Link
               href="/stock/products"
-              className="flex items-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors group"
+              className="flex items-center p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-colors group"
             >
-              <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+              <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
                 <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
@@ -416,7 +532,7 @@ export default function DashboardPage() {
               href="/orders"
               className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-medium"
             >
-              Voir tout
+              Voir tout →
             </Link>
           </div>
         </div>
@@ -443,11 +559,11 @@ export default function DashboardPage() {
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
               {recentOrders?.map((order: any) => (
-                <tr key={order.id} className="table-row-hover">
+                <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <Link
                       href={`/orders/${order.id}`}
-                      className="text-sm font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
+                      className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
                     >
                       #{order.order_number}
                     </Link>
@@ -507,10 +623,10 @@ function StatusCard({
   return (
     <Link
       href={href}
-      className={`rounded-lg border p-4 text-center transition-all ${colors[color]} cursor-pointer`}
+      className={`rounded-xl border p-4 text-center transition-all ${colors[color]} cursor-pointer hover:shadow-md`}
     >
       <p className="text-2xl font-bold">{count}</p>
-      <p className="text-xs mt-1">{label}</p>
+      <p className="text-xs mt-1 font-medium">{label}</p>
     </Link>
   );
 }

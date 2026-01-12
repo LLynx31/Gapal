@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { wsClient } from '@/lib/websocket';
 import { Select } from '@/components/ui/Select';
 import { Input } from '@/components/ui/Input';
-import { useAuthStore, canManageOrders } from '@/lib/auth';
+import { Pagination } from '@/components/ui/Pagination';
+import { useToast } from '@/components/ui/Toast';
+import { useAuthStore } from '@/lib/auth';
 
 const deliveryStatusOptions = [
   { value: '', label: 'Tous les statuts' },
@@ -53,8 +55,9 @@ const getStatusColor = (status: string) => {
 };
 
 export default function OrdersPage() {
-  const { user } = useAuthStore();
-  const canEdit = canManageOrders(user);
+  useAuthStore();
+  const toast = useToast();
+  const queryClient = useQueryClient();
 
   const [filters, setFilters] = useState({
     delivery_status: '',
@@ -63,18 +66,41 @@ export default function OrdersPage() {
     search: '',
   });
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
   const [sortConfig, setSortConfig] = useState<{
     key: string;
     direction: 'asc' | 'desc';
   } | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ['orders', filters],
-    queryFn: () => api.getOrders(
-      Object.fromEntries(
-        Object.entries(filters).filter(([_, v]) => v !== '')
-      )
-    ),
+    queryKey: ['orders', filters, currentPage, pageSize, sortConfig],
+    queryFn: () => {
+      const params: Record<string, string> = {
+        ...Object.fromEntries(
+          Object.entries(filters).filter(([_, v]) => v !== '')
+        ),
+        page: currentPage.toString(),
+        page_size: pageSize.toString(),
+      };
+
+      // Add ordering parameter
+      // Default: Nouvelles commandes en haut (status_order), par priorité (priority_order), puis récentes
+      // Si l'utilisateur trie manuellement, on respecte son choix
+      if (sortConfig) {
+        const orderingPrefix = sortConfig.direction === 'desc' ? '-' : '';
+        params.ordering = `${orderingPrefix}${sortConfig.key}`;
+      } else {
+        // Tri par défaut intelligent:
+        // 1. status_order (nouvelles/en cours avant livrées/annulées)
+        // 2. priority_order (haute avant moyenne avant basse)
+        // 3. -created_at (plus récentes en premier)
+        params.ordering = 'status_order,priority_order,-created_at';
+      }
+
+      return api.getOrders(params);
+    },
     refetchInterval: 30000, // Poll every 30 seconds as fallback
   });
 
@@ -86,13 +112,23 @@ export default function OrdersPage() {
   // WebSocket for real-time updates
   useEffect(() => {
     const unsubscribe = wsClient.on('notification', (data) => {
-      if (data.type === 'new_order' || data.type === 'order_status') {
+      if (data.type === 'new_order') {
+        // Afficher un toast pour la nouvelle commande
+        toast.info(
+          'Nouvelle commande',
+          data.message || `Commande ${data.order_number || ''} reçue`
+        );
+        // Rafraîchir la liste et les stats
         refetch();
+        queryClient.invalidateQueries({ queryKey: ['orderStats'] });
+      } else if (data.type === 'order_status' || data.type === 'order_delivered') {
+        refetch();
+        queryClient.invalidateQueries({ queryKey: ['orderStats'] });
       }
     });
 
     return () => unsubscribe();
-  }, [refetch]);
+  }, [refetch, toast, queryClient]);
 
   // Sorting function
   const handleSort = (key: string) => {
@@ -101,23 +137,17 @@ export default function OrdersPage() {
       direction = 'desc';
     }
     setSortConfig({ key, direction });
+    setCurrentPage(1); // Reset to first page when sorting changes
   };
 
-  // Sort data
-  const sortedOrders = React.useMemo(() => {
-    const orders = data?.results || [];
-    if (!sortConfig) return orders;
+  // Get orders directly from API response (already paginated by backend)
+  const orders = data?.results || [];
+  const totalPages = data?.count ? Math.ceil(data.count / pageSize) : 0;
 
-    return [...orders].sort((a: any, b: any) => {
-      const aValue = a[sortConfig.key];
-      const bValue = b[sortConfig.key];
-
-      if (aValue === bValue) return 0;
-
-      const comparison = aValue < bValue ? -1 : 1;
-      return sortConfig.direction === 'asc' ? comparison : -comparison;
-    });
-  }, [data?.results, sortConfig]);
+  // Reset to page 1 when filters or page size change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters, pageSize]);
 
   return (
     <div className="space-y-6">
@@ -251,16 +281,14 @@ export default function OrdersPage() {
                       <SortIcon column="payment_status" sortConfig={sortConfig} />
                     </button>
                   </th>
-                  {canEdit && (
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  )}
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {sortedOrders.map((order: any) => (
-                  <tr key={order.id}>
+                {orders.map((order: any) => (
+                  <tr key={order.id} className="hover:bg-gray-700/50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900 dark:text-white">{order.order_number}</div>
                       <div className="text-xs text-gray-500 dark:text-gray-400">{order.items_count || order.items?.length || 0} produit(s)</div>
@@ -302,22 +330,20 @@ export default function OrdersPage() {
                         {order.payment_status === 'payee' ? 'Payée' : 'Non payée'}
                       </span>
                     </td>
-                    {canEdit && (
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={() => window.location.href = `/orders/${order.id}`}
-                          className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 text-sm font-medium"
-                        >
-                          Détails
-                        </button>
-                      </td>
-                    )}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => window.location.href = `/orders/${order.id}`}
+                        className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 text-sm font-medium"
+                      >
+                        Détails
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {(!data?.results || data.results.length === 0) && (
                   <tr>
-                    <td colSpan={canEdit ? 8 : 7} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={8} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
                       Aucune commande trouvée
                     </td>
                   </tr>
@@ -326,6 +352,18 @@ export default function OrdersPage() {
             </table>
           )}
         </div>
+
+        {/* Pagination */}
+        {!isLoading && data?.count && data.count > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={data.count}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+          />
+        )}
       </div>
     </div>
   );

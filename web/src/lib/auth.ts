@@ -70,23 +70,46 @@ export const useAuthStore = create<AuthState>()(
   )
 );
 
-// Role checks
+// Role checks - Tous les utilisateurs authentifiés ont accès en lecture à tout (sauf admin)
+
+// Accès en lecture - tous les utilisateurs authentifiés
 export function canAccessOrders(user: User | null): boolean {
-  if (!user) return false;
-  return ['admin', 'gestionnaire_commandes', 'vendeur'].includes(user.role);
+  return !!user; // Tous les utilisateurs authentifiés
 }
 
+export function canAccessStock(user: User | null): boolean {
+  return !!user; // Tous les utilisateurs authentifiés
+}
+
+export function canAccessSales(user: User | null): boolean {
+  return !!user; // Tous les utilisateurs authentifiés
+}
+
+// Accès admin seulement
+export function canAccessAdmin(user: User | null): boolean {
+  if (!user) return false;
+  return user.role === 'admin';
+}
+
+// Gestion (écriture) - rôles spécifiques
 export function canManageOrders(user: User | null): boolean {
   if (!user) return false;
   return ['admin', 'gestionnaire_commandes'].includes(user.role);
 }
 
-export function canAccessStock(user: User | null): boolean {
+export function canManageStock(user: User | null): boolean {
   if (!user) return false;
   return ['admin', 'gestionnaire_stocks'].includes(user.role);
 }
 
-export function canAccessAdmin(user: User | null): boolean {
+export function canManageSales(user: User | null): boolean {
   if (!user) return false;
-  return user.role === 'admin';
+  // Gestionnaire commandes gère les ventes directes
+  return ['admin', 'gestionnaire_commandes'].includes(user.role);
+}
+
+// Vendeur peut créer des commandes (mobile)
+export function canCreateOrders(user: User | null): boolean {
+  if (!user) return false;
+  return ['admin', 'gestionnaire_commandes', 'vendeur'].includes(user.role);
 }

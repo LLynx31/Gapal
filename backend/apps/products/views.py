@@ -13,8 +13,8 @@ from datetime import timedelta
 
 from .models import Product, Category
 from .serializers import (
-    ProductSerializer, ProductListSerializer, ProductSimpleSerializer,
-    CategorySerializer
+    ProductSerializer, ProductCreateSerializer, ProductListSerializer,
+    ProductSimpleSerializer, CategorySerializer
 )
 from apps.users.permissions import IsStockManager, IsAdminOrReadOnly
 
@@ -47,6 +47,8 @@ class ProductViewSet(viewsets.ModelViewSet):
             return ProductListSerializer
         if self.action == 'simple':
             return ProductSimpleSerializer
+        if self.action == 'create':
+            return ProductCreateSerializer
         return ProductSerializer
 
     def get_permissions(self):

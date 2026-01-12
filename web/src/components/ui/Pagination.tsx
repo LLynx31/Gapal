@@ -58,12 +58,13 @@ export function Pagination({
     return pages;
   };
 
-  if (totalPages <= 1) return null;
+  // Show pagination if there are items, even if only 1 page
+  if (totalItems === 0) return null;
 
   return (
-    <div className={cn('flex flex-col sm:flex-row items-center justify-between gap-4 py-4', className)}>
+    <div className={cn('flex flex-col sm:flex-row items-center justify-between gap-4 py-4 px-6 border-t border-gray-200 dark:border-gray-700', className)}>
       {/* Info */}
-      <div className="text-sm text-gray-600">
+      <div className="text-sm text-gray-600 dark:text-gray-400">
         Affichage de <span className="font-medium">{startItem}</span> à{' '}
         <span className="font-medium">{endItem}</span> sur{' '}
         <span className="font-medium">{totalItems}</span> résultats
@@ -73,11 +74,11 @@ export function Pagination({
         {/* Page Size Selector */}
         {onPageSizeChange && (
           <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-600">Par page:</label>
+            <label className="text-sm text-gray-600 dark:text-gray-400">Par page:</label>
             <select
               value={pageSize}
               onChange={(e) => onPageSizeChange(Number(e.target.value))}
-              className="border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               {pageSizeOptions.map((size) => (
                 <option key={size} value={size}>
@@ -95,10 +96,10 @@ export function Pagination({
             onClick={() => onPageChange(currentPage - 1)}
             disabled={currentPage === 1}
             className={cn(
-              'px-2 py-1 rounded-md text-sm font-medium transition-colors',
+              'px-3 py-2 rounded-md text-sm font-medium transition-colors border',
               currentPage === 1
-                ? 'text-gray-300 cursor-not-allowed'
-                : 'text-gray-600 hover:bg-gray-100'
+                ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed border-gray-300 dark:border-gray-700'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600'
             )}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -113,12 +114,12 @@ export function Pagination({
               onClick={() => typeof page === 'number' && onPageChange(page)}
               disabled={page === '...'}
               className={cn(
-                'min-w-[32px] px-2 py-1 rounded-md text-sm font-medium transition-colors',
+                'min-w-[32px] px-3 py-2 rounded-md text-sm font-medium transition-colors border',
                 page === currentPage
-                  ? 'bg-primary-500 text-white'
+                  ? 'bg-blue-600 text-white border-blue-600'
                   : page === '...'
-                  ? 'text-gray-400 cursor-default'
-                  : 'text-gray-600 hover:bg-gray-100'
+                  ? 'text-gray-400 dark:text-gray-600 cursor-default border-transparent'
+                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600'
               )}
             >
               {page}
@@ -130,10 +131,10 @@ export function Pagination({
             onClick={() => onPageChange(currentPage + 1)}
             disabled={currentPage === totalPages}
             className={cn(
-              'px-2 py-1 rounded-md text-sm font-medium transition-colors',
+              'px-3 py-2 rounded-md text-sm font-medium transition-colors border',
               currentPage === totalPages
-                ? 'text-gray-300 cursor-not-allowed'
-                : 'text-gray-600 hover:bg-gray-100'
+                ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed border-gray-300 dark:border-gray-700'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 border-gray-300 dark:border-gray-600'
             )}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -20,7 +20,7 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
-    """Serializer for Product model."""
+    """Serializer for Product model (read and update)."""
     category_name = serializers.CharField(source='category.name', read_only=True)
     unit_display = serializers.CharField(source='get_unit_display', read_only=True)
     is_low_stock = serializers.BooleanField(read_only=True)
@@ -39,7 +39,29 @@ class ProductSerializer(serializers.ModelSerializer):
             'is_expired', 'is_expiring_soon', 'days_until_expiration',
             'created_at', 'updated_at'
         ]
+        # stock_quantity is read-only on update - must use stock movements
+        read_only_fields = ['id', 'stock_quantity', 'created_at', 'updated_at']
+
+
+class ProductCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating a new product with initial stock."""
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    unit_display = serializers.CharField(source='get_unit_display', read_only=True)
+
+    class Meta:
+        model = Product
+        fields = [
+            'id', 'name', 'description', 'unit_price', 'stock_quantity',
+            'category', 'category_name', 'unit', 'unit_display',
+            'barcode', 'min_stock_level', 'expiration_date',
+            'is_active', 'created_at', 'updated_at'
+        ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def validate_stock_quantity(self, value):
+        if value < 0:
+            raise serializers.ValidationError("La quantite initiale ne peut pas etre negative")
+        return value
 
 
 class ProductListSerializer(serializers.ModelSerializer):
@@ -47,13 +69,19 @@ class ProductListSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     unit_display = serializers.CharField(source='get_unit_display', read_only=True)
     is_low_stock = serializers.BooleanField(read_only=True)
+    is_out_of_stock = serializers.BooleanField(read_only=True)
+    is_expired = serializers.BooleanField(read_only=True)
+    is_expiring_soon = serializers.BooleanField(read_only=True)
+    days_until_expiration = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Product
         fields = [
             'id', 'name', 'unit_price', 'stock_quantity',
             'category', 'category_name', 'unit', 'unit_display',
-            'is_low_stock', 'is_active'
+            'barcode', 'min_stock_level', 'expiration_date',
+            'is_low_stock', 'is_out_of_stock', 'is_active',
+            'is_expired', 'is_expiring_soon', 'days_until_expiration'
         ]
 
 

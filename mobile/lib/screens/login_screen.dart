@@ -17,7 +17,25 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
 
   @override
+  void initState() {
+    super.initState();
+    // Clear error message when user starts typing
+    _usernameController.addListener(_clearError);
+    _passwordController.addListener(_clearError);
+  }
+
+  void _clearError() {
+    final authProvider = context.read<AuthProvider>();
+    if (authProvider.errorMessage != null) {
+      // Clear the error when user types
+      authProvider.clearError();
+    }
+  }
+
+  @override
   void dispose() {
+    _usernameController.removeListener(_clearError);
+    _passwordController.removeListener(_clearError);
     _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -26,17 +44,50 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
 
+    print('🔐 LoginScreen: Starting login process');
     final authProvider = context.read<AuthProvider>();
     final success = await authProvider.login(
       _usernameController.text.trim(),
       _passwordController.text,
     );
 
+    print('🔐 LoginScreen: Login result: $success');
+    print('🔐 LoginScreen: Error message: ${authProvider.errorMessage}');
+    print('🔐 LoginScreen: mounted: $mounted');
+
     if (!success && mounted) {
+      print('🔐 LoginScreen: Showing error UI');
+      final errorMsg = authProvider.errorMessage ?? 'Erreur de connexion';
+      print('🔐 LoginScreen: Final error message: $errorMsg');
+      // Clear any existing snackbars
+      ScaffoldMessenger.of(context).clearSnackBars();
+
+      // Show error message in SnackBar
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(authProvider.errorMessage ?? 'Erreur de connexion'),
-          backgroundColor: Colors.red,
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  authProvider.errorMessage ?? 'Erreur de connexion',
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.red.shade700,
+          duration: const Duration(seconds: 6),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          action: SnackBarAction(
+            label: 'OK',
+            textColor: Colors.white,
+            onPressed: () {
+              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            },
+          ),
         ),
       );
     }
@@ -145,6 +196,39 @@ class _LoginScreenState extends State<LoginScreen> {
                     },
                   ),
                   const SizedBox(height: 24),
+
+                  // Error message display
+                  Consumer<AuthProvider>(
+                    builder: (context, auth, child) {
+                      if (auth.errorMessage != null && auth.errorMessage!.isNotEmpty) {
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.red.shade300),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.error_outline, color: Colors.red.shade700),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  auth.errorMessage!,
+                                  style: TextStyle(
+                                    color: Colors.red.shade700,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    },
+                  ),
 
                   // Login button
                   Consumer<AuthProvider>(

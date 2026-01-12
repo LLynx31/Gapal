@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Badge } from '@/components/ui/Badge';
+import { useToast } from '@/components/ui/Toast';
 import { formatDateTime } from '@/lib/utils';
 import type { User, UserRole } from '@/types';
 
@@ -31,6 +32,7 @@ type PasswordMode = 'auto' | 'manual';
 
 export default function AdminPage() {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -57,6 +59,7 @@ export default function AdminPage() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setGeneratedPassword(data.generated_password || '');
+      toast.success('Utilisateur cree', `${data.username} a ete cree avec succes`);
       if (!data.generated_password) {
         setShowCreateModal(false);
         setNewUser({
@@ -69,6 +72,9 @@ export default function AdminPage() {
         });
       }
     },
+    onError: (err: Error) => {
+      toast.error('Erreur', err.message || 'Erreur lors de la creation');
+    },
   });
 
   const updateMutation = useMutation({
@@ -76,8 +82,12 @@ export default function AdminPage() {
       api.updateUser(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      toast.success('Utilisateur modifie', 'Les modifications ont ete enregistrees');
       setShowEditModal(false);
       setEditingUser(null);
+    },
+    onError: (err: Error) => {
+      toast.error('Erreur', err.message || 'Erreur lors de la modification');
     },
   });
 
@@ -85,6 +95,10 @@ export default function AdminPage() {
     mutationFn: (id: number) => api.deleteUser(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      toast.success('Utilisateur desactive', 'L\'utilisateur a ete desactive');
+    },
+    onError: (err: Error) => {
+      toast.error('Erreur', err.message || 'Erreur lors de la desactivation');
     },
   });
 
@@ -189,7 +203,7 @@ export default function AdminPage() {
               </thead>
               <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-gray-700">
                 {users?.results?.map((user: User) => (
-                  <tr key={user.id}>
+                  <tr key={user.id} className="hover:bg-gray-700/50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
                         <div className="text-sm font-medium text-gray-900 dark:text-white">
