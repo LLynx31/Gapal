@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/Input';
 import { Pagination } from '@/components/ui/Pagination';
 import { useToast } from '@/components/ui/Toast';
 import { useAuthStore } from '@/lib/auth';
+import { formatDate } from '@/lib/utils';
 
 const deliveryStatusOptions = [
   { value: '', label: 'Tous les statuts' },
@@ -298,7 +299,7 @@ export default function OrdersPage() {
                       <div className="text-xs text-gray-500 dark:text-gray-400">{order.client_phone}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 dark:text-white">{new Date(order.delivery_date).toLocaleDateString('fr-FR')}</div>
+                      <div className="text-sm text-gray-900 dark:text-white">{formatDate(order.delivery_date)}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${

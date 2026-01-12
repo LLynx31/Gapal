@@ -13,22 +13,52 @@ export function formatPrice(price: number): string {
   return new Intl.NumberFormat('fr-FR').format(price) + ' FCFA';
 }
 
-export function formatDate(date: string): string {
-  return new Date(date).toLocaleDateString('fr-FR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
+export function formatDate(date: string | null | undefined): string {
+  if (!date) {
+    return 'Date non définie';
+  }
+
+  try {
+    const parsedDate = new Date(date);
+
+    // Check if date is valid
+    if (isNaN(parsedDate.getTime())) {
+      return 'Date invalide';
+    }
+
+    return parsedDate.toLocaleDateString('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+  } catch (error) {
+    return 'Date invalide';
+  }
 }
 
-export function formatDateTime(date: string): string {
-  return new Date(date).toLocaleDateString('fr-FR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+export function formatDateTime(date: string | null | undefined): string {
+  if (!date) {
+    return 'Date non définie';
+  }
+
+  try {
+    const parsedDate = new Date(date);
+
+    // Check if date is valid
+    if (isNaN(parsedDate.getTime())) {
+      return 'Date invalide';
+    }
+
+    return parsedDate.toLocaleDateString('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch (error) {
+    return 'Date invalide';
+  }
 }
 
 export function getPriorityColor(priority: string): string {

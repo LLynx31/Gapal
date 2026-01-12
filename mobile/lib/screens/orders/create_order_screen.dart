@@ -31,6 +31,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
 
   String _priority = Priority.moyenne;
   bool _isPaid = false;
+  DateTime _deliveryDate = DateTime.now().add(const Duration(days: 1)); // Default to tomorrow
   final Map<int, int> _selectedProducts = {}; // productId -> quantity
 
   // Speech to text
@@ -122,7 +123,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
       clientName: _clientNameController.text.trim(),
       clientPhone: _clientPhoneController.text.trim(),
       deliveryAddress: _deliveryAddressController.text.trim(),
-      deliveryDate: DateTime.now().add(const Duration(days: 1)), // Default to tomorrow
+      deliveryDate: _deliveryDate,
       deliveryStatus: 'nouvelle',
       paymentStatus: _isPaid ? 'payee' : 'non_payee',
       priority: _priority,
@@ -252,6 +253,8 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                   clientPhoneController: _clientPhoneController,
                   deliveryAddressController: _deliveryAddressController,
                   notesController: _notesController,
+                  deliveryDate: _deliveryDate,
+                  onDeliveryDateChanged: (date) => setState(() => _deliveryDate = date),
                   isListening: _isListening,
                   speechAvailable: _speechAvailable,
                   onStartListening: _startListening,
@@ -261,6 +264,7 @@ class _CreateOrderScreenState extends State<CreateOrderScreen> {
                   clientName: _clientNameController.text,
                   clientPhone: _clientPhoneController.text,
                   deliveryAddress: _deliveryAddressController.text,
+                  deliveryDate: _deliveryDate,
                   notes: _notesController.text,
                   priority: _priority,
                   isPaid: _isPaid,
@@ -529,6 +533,8 @@ class _ClientInfoStep extends StatelessWidget {
   final TextEditingController clientPhoneController;
   final TextEditingController deliveryAddressController;
   final TextEditingController notesController;
+  final DateTime deliveryDate;
+  final ValueChanged<DateTime> onDeliveryDateChanged;
   final bool isListening;
   final bool speechAvailable;
   final VoidCallback onStartListening;
@@ -540,6 +546,8 @@ class _ClientInfoStep extends StatelessWidget {
     required this.clientPhoneController,
     required this.deliveryAddressController,
     required this.notesController,
+    required this.deliveryDate,
+    required this.onDeliveryDateChanged,
     required this.isListening,
     required this.speechAvailable,
     required this.onStartListening,
@@ -608,6 +616,46 @@ class _ClientInfoStep extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
+            // Delivery date
+            InkWell(
+              onTap: () async {
+                final DateTime? picked = await showDatePicker(
+                  context: context,
+                  initialDate: deliveryDate,
+                  firstDate: DateTime.now(),
+                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                  locale: const Locale('fr', 'FR'),
+                  builder: (context, child) {
+                    return Theme(
+                      data: Theme.of(context).copyWith(
+                        colorScheme: const ColorScheme.light(
+                          primary: AppTheme.primary,
+                          onPrimary: Colors.white,
+                          onSurface: Colors.black,
+                        ),
+                      ),
+                      child: child!,
+                    );
+                  },
+                );
+                if (picked != null) {
+                  onDeliveryDateChanged(picked);
+                }
+              },
+              child: InputDecorator(
+                decoration: const InputDecoration(
+                  labelText: 'Date de livraison *',
+                  prefixIcon: Icon(Icons.calendar_today_outlined),
+                  border: OutlineInputBorder(),
+                ),
+                child: Text(
+                  '${deliveryDate.day.toString().padLeft(2, '0')}/${deliveryDate.month.toString().padLeft(2, '0')}/${deliveryDate.year}',
+                  style: const TextStyle(fontSize: 16),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
             // Notes with voice input
             TextFormField(
               controller: notesController,
@@ -663,6 +711,7 @@ class _ConfirmationStep extends StatelessWidget {
   final String clientName;
   final String clientPhone;
   final String deliveryAddress;
+  final DateTime deliveryDate;
   final String notes;
   final String priority;
   final bool isPaid;
@@ -674,6 +723,7 @@ class _ConfirmationStep extends StatelessWidget {
     required this.clientName,
     required this.clientPhone,
     required this.deliveryAddress,
+    required this.deliveryDate,
     required this.notes,
     required this.priority,
     required this.isPaid,
@@ -739,6 +789,17 @@ class _ConfirmationStep extends StatelessWidget {
                     ],
                   ),
                 ],
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.calendar_today, size: 20, color: Colors.grey),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Livraison: ${deliveryDate.day.toString().padLeft(2, '0')}/${deliveryDate.month.toString().padLeft(2, '0')}/${deliveryDate.year}',
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),

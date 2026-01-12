@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'config/theme.dart';
 import 'providers/auth_provider.dart';
@@ -58,6 +59,15 @@ class GapalApp extends StatelessWidget {
         title: 'Gapal du Faso',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('fr', 'FR'),
+        ],
+        locale: const Locale('fr', 'FR'),
         home: const AuthWrapper(),
       ),
     );
