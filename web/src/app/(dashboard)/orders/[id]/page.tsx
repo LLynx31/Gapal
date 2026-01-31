@@ -78,6 +78,32 @@ export default function OrderDetailPage() {
     },
   });
 
+  const handleDownloadReceipt = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/${orderId}/receipt/`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        },
+      });
+
+      if (!response.ok) throw new Error('Export failed');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `recu-${order?.order_number}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      toast.success('Reçu généré', 'Le reçu a été téléchargé avec succès');
+    } catch (error) {
+      toast.error('Erreur', 'Erreur lors de la génération du reçu');
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-96">
@@ -289,6 +315,23 @@ export default function OrderDetailPage() {
                 </div>
               )}
             </div>
+
+            {/* Download Receipt */}
+            {order.payment_status === 'payee' && (order.delivery_status === 'en_cours' || order.delivery_status === 'livree') && (
+              <div className="mt-6 pt-6 border-t border-gray-200">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleDownloadReceipt}
+                  className="w-full"
+                >
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Télécharger le reçu
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Order Info */}

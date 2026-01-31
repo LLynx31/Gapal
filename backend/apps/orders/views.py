@@ -302,3 +302,21 @@ class OrderViewSet(viewsets.ModelViewSet):
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
 
         return response
+
+    @action(detail=True, methods=['get'], url_path='receipt')
+    def generate_receipt(self, request, pk=None):
+        """Generate receipt PDF for a specific order."""
+        from django.http import HttpResponse
+        from .receipt_generator import generate_order_receipt
+
+        order = self.get_object()
+
+        # Generate receipt PDF
+        pdf_buffer = generate_order_receipt(order)
+
+        # Return as HTTP response
+        response = HttpResponse(pdf_buffer, content_type='application/pdf')
+        filename = f'recu-{order.order_number}.pdf'
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+        return response
