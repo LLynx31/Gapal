@@ -83,8 +83,8 @@ export default function OrderReportsPage() {
       if (filters.payment_status) params.append('payment_status', filters.payment_status);
       if (filters.priority) params.append('priority', filters.priority);
 
-      // This endpoint should be implemented in the backend
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/reports/orders/pdf/?${params}`, {
+      // Call the PDF export endpoint
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders/pdf/?${params}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
         },

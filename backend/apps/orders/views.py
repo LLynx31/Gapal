@@ -274,3 +274,31 @@ class OrderViewSet(viewsets.ModelViewSet):
         }
 
         return Response(stats)
+
+    @action(detail=False, methods=['get'], url_path='pdf')
+    def export_pdf(self, request):
+        """Export orders as PDF report."""
+        from django.http import HttpResponse
+        from .pdf_generator import generate_orders_pdf
+
+        # Get filtered queryset
+        queryset = self.filter_queryset(self.get_queryset())
+
+        # Get filter parameters for display in PDF
+        filters = {
+            'start_date': request.query_params.get('start_date'),
+            'end_date': request.query_params.get('end_date'),
+            'delivery_status': request.query_params.get('delivery_status'),
+            'payment_status': request.query_params.get('payment_status'),
+            'priority': request.query_params.get('priority'),
+        }
+
+        # Generate PDF
+        pdf_buffer = generate_orders_pdf(queryset, filters)
+
+        # Return as HTTP response
+        response = HttpResponse(pdf_buffer, content_type='application/pdf')
+        filename = f'rapport-commandes-{timezone.now().strftime("%Y%m%d")}.pdf'
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+        return response
