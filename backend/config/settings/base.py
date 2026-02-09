@@ -126,15 +126,18 @@ SIMPLE_JWT = {
 }
 
 # Channels configuration
+REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')
+REDIS_PORT = int(os.environ.get('REDIS_PORT', 6379))
+
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            "hosts": [os.environ.get('REDIS_URL', 'redis://localhost:6379')],
+            "hosts": [(REDIS_HOST, REDIS_PORT)],
         },
     },
 }
 
 # CORS
-CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ORIGINS', 'http://localhost:3000').split(',')
+CORS_ALLOWED_ORIGINS = os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:3000').split(',')
 CORS_ALLOW_CREDENTIALS = True
