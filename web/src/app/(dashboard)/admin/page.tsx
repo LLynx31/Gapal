@@ -418,7 +418,7 @@ export default function AdminPage() {
                 <div className="flex space-x-2">
                   <Button
                     type="button"
-                    variant="secondary"
+                    variant="danger"
                     onClick={closeModal}
                     className="flex-1"
                   >
@@ -458,7 +458,7 @@ export default function AdminPage() {
               <div className="flex space-x-2">
                 <Button
                   type="button"
-                  variant="secondary"
+                  variant="danger"
                   onClick={closeEditModal}
                   className="flex-1"
                 >

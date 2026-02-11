@@ -24,8 +24,8 @@ export function Modal({
   children,
   size = 'md',
   showCloseButton = true,
-  closeOnBackdrop = true,
-  closeOnEscape = true,
+  closeOnBackdrop = false,
+  closeOnEscape = false,
   className,
 }: ModalProps) {
   const handleEscape = useCallback(

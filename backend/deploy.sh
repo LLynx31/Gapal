@@ -176,12 +176,18 @@ log "   - Nginx rechargé"
 log "13. Vérifications de l'application..."
 sleep 3
 
-# Vérifier HTTP
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/api/ || echo "000")
+# Vérifier HTTP (on teste /admin/ qui retourne généralement 301/302)
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/admin/ || echo "000")
 if [ "$HTTP_CODE" == "200" ] || [ "$HTTP_CODE" == "301" ] || [ "$HTTP_CODE" == "302" ]; then
-    log "   ✓ API HTTP accessible (HTTP $HTTP_CODE)"
+    log "   ✓ API HTTP accessible (HTTP $HTTP_CODE sur /admin/)"
 else
-    warn "   ✗ API HTTP - Code inattendu: $HTTP_CODE"
+    # Essayer aussi /api/users/me/ qui nécessite auth mais devrait retourner 401
+    HTTP_CODE2=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/api/users/me/ || echo "000")
+    if [ "$HTTP_CODE2" == "401" ] || [ "$HTTP_CODE2" == "403" ]; then
+        log "   ✓ API HTTP accessible (HTTP $HTTP_CODE2 sur /api/users/me/ - auth requise)"
+    else
+        warn "   ✗ API HTTP - Codes inattendus: /admin/=$HTTP_CODE, /api/users/me/=$HTTP_CODE2"
+    fi
 fi
 
 # Vérifier WebSocket (Daphne sur port 8001)

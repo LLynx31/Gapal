@@ -624,7 +624,7 @@ function RestockModal({
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen px-4">
-        <div className="fixed inset-0 bg-black opacity-50" onClick={onClose}></div>
+        <div className="fixed inset-0 bg-black opacity-50"></div>
 
         <div className="relative bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
           <div className="p-6 border-b border-gray-700">
@@ -728,7 +728,7 @@ function RestockModal({
             )}
 
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-700">
-              <Button type="button" variant="secondary" onClick={onClose}>
+              <Button type="button" variant="danger" onClick={onClose}>
                 Annuler
               </Button>
               <Button
@@ -813,7 +813,7 @@ function DestockModal({
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen px-4">
-        <div className="fixed inset-0 bg-black opacity-50" onClick={onClose}></div>
+        <div className="fixed inset-0 bg-black opacity-50"></div>
 
         <div className="relative bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
           <div className="p-6 border-b border-gray-700">
@@ -923,7 +923,7 @@ function DestockModal({
             )}
 
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-700">
-              <Button type="button" variant="secondary" onClick={onClose}>
+              <Button type="button" variant="danger" onClick={onClose}>
                 Annuler
               </Button>
               <Button
